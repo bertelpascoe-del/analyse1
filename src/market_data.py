@@ -172,3 +172,96 @@ def get_ticker_news(ticker: str, max_items: int = 10) -> list:
         return result
     except Exception:
         return []
+
+def get_intraday_top_movers(tickers, lookback_hours=2, interval="5m", top_n=10):
+    """
+    Finder top movers over de seneste X timer baseret på intraday-data.
+
+    Returnerer:
+    - Top gainers
+    - Top losers
+    - Samlet dataframe
+
+    Bemærk:
+    yfinance intraday-data kan være forsinket og afhænger af markedets åbningstid.
+    """
+
+    import pandas as pd
+    import yfinance as yf
+
+    rows = []
+
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
+
+            data = stock.history(
+                period="1d",
+                interval=interval,
+                prepost=True
+            )
+
+            if data is None or data.empty or len(data) < 2:
+                continue
+
+            data = data.dropna()
+
+            latest_price = data["Close"].iloc[-1]
+            latest_time = data.index[-1]
+
+            target_time = latest_time - pd.Timedelta(hours=lookback_hours)
+
+            historical_data = data[data.index <= target_time]
+
+            if historical_data.empty:
+                start_price = data["Close"].iloc[0]
+                start_time = data.index[0]
+            else:
+                start_price = historical_data["Close"].iloc[-1]
+                start_time = historical_data.index[-1]
+
+            if start_price == 0 or pd.isna(start_price):
+                continue
+
+            change_pct = ((latest_price - start_price) / start_price) * 100
+            change_abs = latest_price - start_price
+
+            latest_volume = data["Volume"].iloc[-1] if "Volume" in data.columns else 0
+            total_volume = data["Volume"].sum() if "Volume" in data.columns else 0
+
+            rows.append(
+                {
+                    "Ticker": ticker,
+                    "Pris nu": latest_price,
+                    "Pris før": start_price,
+                    "Ændring": change_abs,
+                    "Ændring (%)": change_pct,
+                    "Seneste volumen": latest_volume,
+                    "Volumen 1D": total_volume,
+                    "Starttid": start_time.strftime("%H:%M"),
+                    "Seneste tid": latest_time.strftime("%H:%M"),
+                }
+            )
+
+        except Exception:
+            continue
+
+    df = pd.DataFrame(rows)
+
+    if df.empty:
+        return {
+            "gainers": pd.DataFrame(),
+            "losers": pd.DataFrame(),
+            "all": pd.DataFrame(),
+        }
+
+    df = df.sort_values("Ændring (%)", ascending=False)
+
+    gainers = df.head(top_n)
+    losers = df.tail(top_n).sort_values("Ændring (%)", ascending=True)
+
+    return {
+        "gainers": gainers,
+        "losers": losers,
+        "all": df,
+    }
