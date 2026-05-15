@@ -3,8 +3,7 @@ import streamlit as st
 import sys, os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from config import DISCLAIMER
+from config import DEFAULT_WATCHLIST, DISCLAIMER
 from src.news_fetcher import fetch_all_news
 from src.sentiment import analyze_sentiment
 from src.stock_mapper import enrich_news_with_stocks, load_tickers_df
