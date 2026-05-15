@@ -92,6 +92,39 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.markdown("---")
+    st.subheader("🌍 Globale markeder")
+
+    global_markets = get_global_market_status()
+
+    for market in global_markets:
+        st.markdown(
+            f"""
+            <div style="
+                padding: 8px 10px;
+                margin-bottom: 6px;
+                border-radius: 8px;
+                background-color: #1e2130;
+                border-left: 4px solid {market['color']};
+            ">
+                <div style="font-weight: 600;">
+                    {market['emoji']} {market['name']}
+                </div>
+                <div style="font-size: 0.85rem; color: #cccccc;">
+                    Status:
+                    <span style="color:{market['color']}; font-weight: 700;">
+                        {market['status']}
+                    </span>
+                    · Lokal tid: {market['local_time']}
+                </div>
+                <div style="font-size: 0.75rem; color: #999999;">
+                    Åbningstid: {market['open']} - {market['close']}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     st.caption(DISCLAIMER)
 
 
