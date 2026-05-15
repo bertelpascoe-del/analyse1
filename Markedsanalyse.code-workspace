@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"name": "Markedsanalyse",
+			"path": "."
+		},
+		{
+			"name": "src",
+			"path": "../../../Desktop/marked/src"
+		},
+		{
+			"name": "pages",
+			"path": "../../../Desktop/marked/pages"
+		},
+		{
+			"name": "data",
+			"path": "../../../Desktop/marked/data"
+		}
+	],
+	"settings": {}
+}
