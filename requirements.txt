@@ -9,3 +9,4 @@ vaderSentiment>=3.3.2
 python-dotenv>=1.0.0
 matplotlib>=3.8.0
 pytz>=2024.1
+lxml
