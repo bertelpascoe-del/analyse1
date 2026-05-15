@@ -1,6 +1,7 @@
 # src/stock_mapper.py — Kobler nyheder til berørte aktier
 import re
 import pandas as pd
+import streamlit as st
 from config import COMPANY_ALIASES, SECTOR_TRIGGERS
 
 
@@ -15,6 +16,27 @@ def load_tickers_df() -> pd.DataFrame:
             "name":   ["Apple", "Microsoft", "Nvidia"],
             "sector": ["Technology", "Technology", "Technology"],
         })
+
+@st.cache_data(ttl=24 * 60 * 60)
+def get_sp500_tickers():
+    """
+    Henter S&P 500 tickers fra Wikipedia.
+    Returnerer en liste med tickers kompatible med yfinance.
+    """
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        tables = pd.read_html(url)
+
+        df = tables[0]
+
+        tickers = df["Symbol"].tolist()
+
+        # Yahoo Finance bruger '-' i stedet for '.' for visse tickers
+        tickers = [ticker.replace(".", "-") for ticker in tickers]
+
+        return sorted(tickers)
+
+    except Exception
 
 
 def map_news_to_stocks(news_item: dict, tickers_df: pd.DataFrame = None) -> list:
