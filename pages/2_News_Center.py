@@ -10,6 +10,11 @@ from src.sentiment import analyze_sentiment
 from src.stock_mapper import enrich_news_with_stocks, load_tickers_df
 from src.charts import plot_sentiment_distribution, plot_most_mentioned
 from src.utils import sentiment_label_to_emoji
+from src.macro_analyzer import (
+    enrich_news_with_macro,
+    calculate_sector_trends,
+    get_macro_theme_summary,
+)
 
 st.set_page_config(page_title="Nyhedscenter", page_icon="📰", layout="wide")
 st.title("📰 Nyhedscenter")
@@ -37,11 +42,14 @@ st.markdown("""
 
 # ── Hent data ─────────────────────────────────────────────────────────────────
 with st.spinner("Henter nyheder…"):
-    raw_news   = fetch_all_news()
+    raw_news = fetch_all_news()
     tickers_df = load_tickers_df()
+
     for item in raw_news:
         item["sentiment"] = analyze_sentiment(item.get("raw_text", ""))
+
     news = enrich_news_with_stocks(raw_news, tickers_df)
+    news = enrich_news_with_macro(news)
 
 # ── Sidebar-filtre ────────────────────────────────────────────────────────────
 with st.sidebar:
