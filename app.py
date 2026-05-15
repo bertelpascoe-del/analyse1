@@ -18,7 +18,7 @@ from src.charts import (
     plot_sentiment_distribution,
     plot_most_mentioned,
 )
-from src.utils import format_percent, get_market
+from src.utils import format_number, format_percent, color_for_change, get_market_status, get_global_market_status
 
 # ── Side-konfiguration ────────────────────────────────────────────────────────
 st.set_page_config(
