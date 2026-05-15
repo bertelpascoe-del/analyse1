@@ -30,25 +30,39 @@ st.caption(DISCLAIMER)
 @st.cache_data(ttl=24 * 60 * 60)
 def get_sp500_tickers():
     """
-    Henter S&P 500 tickers fra Wikipedia.
-    Yahoo Finance bruger '-' i stedet for '.' for enkelte tickers.
-    Eksempel: BRK.B -> BRK-B
+    Henter S&P 500 tickers fra Wikipedia med requests + user-agent.
+    Returnerer en liste med tickers kompatible med yfinance.
     """
     try:
+        import requests
+        from io import StringIO
+
         url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        tables = pd.read_html(url)
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0 Safari/537.36"
+            )
+        }
+
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        tables = pd.read_html(StringIO(response.text))
         df = tables[0]
 
         tickers = df["Symbol"].dropna().astype(str).tolist()
+
+        # Yahoo Finance bruger '-' i stedet for '.' for fx BRK.B
         tickers = [ticker.replace(".", "-") for ticker in tickers]
 
         return sorted(list(set(tickers)))
 
     except Exception as e:
-        st.sidebar.warning(
-            "Kunne ikke hente S&P 500-listen. Bruger standardlisten i stedet."
-        )
-        return DEFAULT_WATCHLIST
+        st.sidebar.error(f"Kunne ikke hente S&P 500-listen: {e}")
+        return []
 
 
 def get_sector_tickers(selected_sectors):
