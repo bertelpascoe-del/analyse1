@@ -1,5 +1,5 @@
 # app.py — Forside / Markedsoverblik
-from src.utils import format_percent, get_market_status, get_global_market_status
+
 import streamlit as st
 import pandas as pd
 import sys
@@ -18,8 +18,7 @@ from src.charts import (
     plot_sentiment_distribution,
     plot_most_mentioned,
 )
-from src.utils import format_percent, get_market_status
-
+from src.utils import format_percent, get_market
 
 # ── Side-konfiguration ────────────────────────────────────────────────────────
 st.set_page_config(
