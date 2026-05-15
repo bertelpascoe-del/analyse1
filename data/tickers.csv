@@ -1,0 +1,50 @@
+ticker,name,sector,country
+AAPL,Apple Inc.,Technology,US
+MSFT,Microsoft Corporation,Technology,US
+GOOGL,Alphabet Inc.,Technology,US
+AMZN,Amazon.com Inc.,Consumer Discretionary,US
+NVDA,NVIDIA Corporation,Technology,US
+META,Meta Platforms Inc.,Communication Services,US
+TSLA,Tesla Inc.,Consumer Discretionary,US
+AMD,Advanced Micro Devices,Technology,US
+INTC,Intel Corporation,Technology,US
+QCOM,Qualcomm Inc.,Technology,US
+ASML,ASML Holding,Technology,NL
+ARM,ARM Holdings,Technology,US
+JPM,JPMorgan Chase,Financials,US
+BAC,Bank of America,Financials,US
+GS,Goldman Sachs,Financials,US
+MS,Morgan Stanley,Financials,US
+V,Visa Inc.,Financials,US
+MA,Mastercard Inc.,Financials,US
+JNJ,Johnson & Johnson,Healthcare,US
+PFE,Pfizer Inc.,Healthcare,US
+MRK,Merck & Co.,Healthcare,US
+UNH,UnitedHealth Group,Healthcare,US
+ABBV,AbbVie Inc.,Healthcare,US
+LLY,Eli Lilly and Company,Healthcare,US
+XOM,Exxon Mobil,Energy,US
+CVX,Chevron Corporation,Energy,US
+COP,ConocoPhillips,Energy,US
+SLB,SLB (Schlumberger),Energy,US
+WMT,Walmart Inc.,Consumer Staples,US
+COST,Costco Wholesale,Consumer Staples,US
+HD,The Home Depot,Consumer Discretionary,US
+MCD,McDonald's Corporation,Consumer Staples,US
+PG,Procter & Gamble,Consumer Staples,US
+KO,The Coca-Cola Company,Consumer Staples,US
+PEP,PepsiCo Inc.,Consumer Staples,US
+BA,Boeing Company,Industrials,US
+CAT,Caterpillar Inc.,Industrials,US
+GE,GE Aerospace,Industrials,US
+LMT,Lockheed Martin,Industrials,US
+DIS,The Walt Disney Company,Communication Services,US
+NFLX,Netflix Inc.,Communication Services,US
+T,AT&T Inc.,Communication Services,US
+VZ,Verizon Communications,Communication Services,US
+AMT,American Tower Corp,Real Estate,US
+NEM,Newmont Corporation,Materials,US
+FCX,Freeport-McMoRan,Materials,US
+NOVO-B.CO,Novo Nordisk,Healthcare,DK
+MAERSK-B.CO,A.P. Moeller-Maersk,Industrials,DK
+ORSTED.CO,Orsted A/S,Energy,DK
