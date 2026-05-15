@@ -1,5 +1,117 @@
+# src/utils.py
+
 from datetime import datetime, time
 import pytz
+
+
+def format_number(value):
+    """
+    Formaterer store tal pænt.
+    Eksempel: 1500000 -> 1.50M
+    """
+    try:
+        if value is None:
+            return "N/A"
+
+        value = float(value)
+
+        if value >= 1_000_000_000:
+            return f"{value / 1_000_000_000:.2f}B"
+        elif value >= 1_000_000:
+            return f"{value / 1_000_000:.2f}M"
+        elif value >= 1_000:
+            return f"{value / 1_000:.2f}K"
+        else:
+            return f"{value:.0f}"
+
+    except Exception:
+        return "N/A"
+
+
+def format_percent(value):
+    """
+    Formaterer procenttal.
+    Eksempel: 2.345 -> +2.35%
+    """
+    try:
+        if value is None:
+            return "N/A"
+
+        value = float(value)
+        sign = "+" if value > 0 else ""
+        return f"{sign}{value:.2f}%"
+
+    except Exception:
+        return "N/A"
+
+
+def color_for_change(value):
+    """
+    Returnerer farve baseret på positiv/negativ ændring.
+    """
+    try:
+        value = float(value)
+
+        if value > 0:
+            return "#00c853"
+        elif value < 0:
+            return "#d50000"
+        else:
+            return "#9e9e9e"
+
+    except Exception:
+        return "#9e9e9e"
+
+
+def get_market_status():
+    """
+    Simpel markedsstatus for USA-markedet.
+    Tager højde for lokal New York-tid og weekend,
+    men ikke helligdage.
+    """
+    tz = pytz.timezone("America/New_York")
+    now = datetime.now(tz)
+    current_time = now.time()
+    weekday = now.weekday()
+
+    market_open = time(9, 30)
+    market_close = time(16, 0)
+    pre_market_open = time(4, 0)
+    after_hours_close = time(20, 0)
+
+    if weekday >= 5:
+        return {
+            "status": "Lukket",
+            "color": "#d50000",
+            "local_time": now.strftime("%H:%M"),
+        }
+
+    if market_open <= current_time <= market_close:
+        return {
+            "status": "Åbent",
+            "color": "#00c853",
+            "local_time": now.strftime("%H:%M"),
+        }
+
+    if pre_market_open <= current_time < market_open:
+        return {
+            "status": "Pre-market",
+            "color": "#ffab00",
+            "local_time": now.strftime("%H:%M"),
+        }
+
+    if market_close < current_time <= after_hours_close:
+        return {
+            "status": "After-hours",
+            "color": "#ffab00",
+            "local_time": now.strftime("%H:%M"),
+        }
+
+    return {
+        "status": "Lukket",
+        "color": "#d50000",
+        "local_time": now.strftime("%H:%M"),
+    }
 
 
 GLOBAL_MARKETS = [
@@ -101,10 +213,12 @@ def get_global_market_status():
             status = "Lukket"
             status_type = "closed"
             color = "#d50000"
+
         elif market["open"] <= current_time <= market["close"]:
             status = "Åbent"
             status_type = "open"
             color = "#00c853"
+
         elif (
             market["pre_open"] is not None
             and market["pre_open"] <= current_time < market["open"]
@@ -112,6 +226,7 @@ def get_global_market_status():
             status = "Pre-market"
             status_type = "pre_market"
             color = "#ffab00"
+
         elif (
             market["after_close"] is not None
             and market["close"] < current_time <= market["after_close"]
@@ -119,6 +234,7 @@ def get_global_market_status():
             status = "After-hours"
             status_type = "after_hours"
             color = "#ffab00"
+
         else:
             status = "Lukket"
             status_type = "closed"
