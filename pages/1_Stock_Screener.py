@@ -317,7 +317,15 @@ col4.metric("Gns. research-score", f"{df['Research-score'].mean():.1f}")
 st.markdown("---")
 st.subheader("🔎 Potentielle research-kandidater")
 
-top_research = df.sort_values("Research-score", ascending=False).head(15)
+top_n_research = st.slider(
+    "Antal research-kandidater der vises",
+    min_value=5,
+    max_value=min(100, len(df)),
+    value=min(25, len(df)),
+    step=5,
+)
+
+top_research = df.sort_values("Research-score", ascending=False).head(top_n_research)
 
 top_research_display = top_research.copy()
 
