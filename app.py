@@ -227,7 +227,66 @@ if not overview.empty:
 
     st.plotly_chart(plot_top_movers(combined), use_container_width=True)
 
+# ── Intraday top movers ───────────────────────────────────────────────────────
+st.markdown("---")
+st.subheader("⚡ Top movers de seneste 2 timer")
 
+with st.spinner("Henter intraday-data for de seneste 2 timer…"):
+    intraday_movers = get_intraday_top_movers(
+        DEFAULT_WATCHLIST,
+        lookback_hours=2,
+        interval="5m",
+        top_n=5,
+    )
+
+col_intraday_gainers, col_intraday_losers = st.columns(2)
+
+with col_intraday_gainers:
+    st.markdown("### 🟢 Største stigninger")
+
+    gainers_2h = intraday_movers.get("gainers")
+
+    if gainers_2h is not None and not gainers_2h.empty:
+        display_gainers = gainers_2h.copy()
+        display_gainers["Pris nu"] = display_gainers["Pris nu"].map(lambda x: f"${x:.2f}")
+        display_gainers["Pris før"] = display_gainers["Pris før"].map(lambda x: f"${x:.2f}")
+        display_gainers["Ændring (%)"] = display_gainers["Ændring (%)"].map(lambda x: f"{x:+.2f}%")
+
+        st.dataframe(
+            display_gainers[
+                ["Ticker", "Pris før", "Pris nu", "Ændring (%)", "Starttid", "Seneste tid"]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Ingen intraday-data fundet for top gainers.")
+
+with col_intraday_losers:
+    st.markdown("### 🔴 Største fald")
+
+    losers_2h = intraday_movers.get("losers")
+
+    if losers_2h is not None and not losers_2h.empty:
+        display_losers = losers_2h.copy()
+        display_losers["Pris nu"] = display_losers["Pris nu"].map(lambda x: f"${x:.2f}")
+        display_losers["Pris før"] = display_losers["Pris før"].map(lambda x: f"${x:.2f}")
+        display_losers["Ændring (%)"] = display_losers["Ændring (%)"].map(lambda x: f"{x:+.2f}%")
+
+        st.dataframe(
+            display_losers[
+                ["Ticker", "Pris før", "Pris nu", "Ændring (%)", "Starttid", "Seneste tid"]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Ingen intraday-data fundet for top losers.")
+
+st.caption(
+    "Intraday-data kan være forsinket og afhænger af markedets åbningstid. "
+    "Dette er ikke finansiel rådgivning."
+)
 # ── Scoring-tabel ─────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("📊 Interesseanalyse")
