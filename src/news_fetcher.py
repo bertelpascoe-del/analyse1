@@ -1,191 +1,628 @@
-# src/news_fetcher.py — Henter nyheder fra RSS-feeds og valgfrie API'er
+# src/news_fetcher.py
+
+import hashlib
+import time
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote_plus
+
 import feedparser
+import pandas as pd
 import requests
 import streamlit as st
-from datetime import datetime, timezone
-import time as time_module
-from config import RSS_FEEDS, CACHE_TTL_NEWS
 
-# Fallback-nyheder hvis alle feeds fejler
-FALLBACK_NEWS = [
-    {
-        "title":     "Markedsdata midlertidigt utilgængelig",
-        "source":    "System",
-        "published": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "url":       "#",
-        "summary":   "Nyhedsfeeds er ikke tilgængelige i øjeblikket. "
-                     "Tjek din internetforbindelse, eller opdater siden om lidt.",
-        "tickers":   [],
-        "raw_text":  "",
-    }
-]
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (compatible; StockDashboard/1.0; "
-        "+https://github.com/your-repo)"
-    )
-}
+try:
+    from config import RSS_FEEDS, DEFAULT_WATCHLIST
+except Exception:
+    RSS_FEEDS = []
+    DEFAULT_WATCHLIST = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
 
 
-def _parse_date(entry) -> str:
-    """Forsøg at parse dato fra et feedparser-entry."""
-    for attr in ("published_parsed", "updated_parsed", "created_parsed"):
-        parsed = getattr(entry, attr, None)
-        if parsed:
-            try:
-                dt = datetime(*parsed[:6], tzinfo=timezone.utc)
-                return dt.strftime("%Y-%m-%d %H:%M")
-            except Exception:
-                pass
-    return datetime.now().strftime("%Y-%m-%d %H:%M")
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
-
-def fetch_rss_feed(feed_info: dict, timeout: int = 8) -> list:
+def _get_secret(name, default=None):
     """
-    Hent og parse ét RSS-feed.
-    Returnér liste af normaliserede nyhedsemner.
+    Henter Streamlit secret uden at crashe lokalt.
     """
-    items = []
     try:
-        resp = requests.get(
-            feed_info["url"], headers=HEADERS, timeout=timeout
+        return st.secrets.get(name, default)
+    except Exception:
+        return default
+
+
+def _safe_get(url, params=None, headers=None, timeout=15):
+    """
+    Simpel requests wrapper.
+    """
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            headers=headers,
+            timeout=timeout,
         )
-        resp.raise_for_status()
-        feed = feedparser.parse(resp.content)
-
-        for entry in feed.entries[:15]:
-            title   = getattr(entry, "title",   "Ingen titel")
-            summary = getattr(entry, "summary", "") or getattr(entry, "description", "")
-            # Rens HTML fra summary
-            import re
-            summary = re.sub(r"<[^>]+>", "", summary).strip()
-            link    = getattr(entry, "link", "#")
-
-            items.append({
-                "title":     title,
-                "source":    feed_info["name"],
-                "published": _parse_date(entry),
-                "url":       link,
-                "summary":   summary[:500],
-                "raw_text":  f"{title} {summary}",
-                "tickers":   [],   # Udfyldes af stock_mapper
-            })
-    except requests.exceptions.Timeout:
-        pass   # Feed timeout — ignorer stille
+        response.raise_for_status()
+        return response
     except Exception:
-        pass   # Andet fejl — ignorer stille
-
-    return items
+        return None
 
 
-@st.cache_data(ttl=CACHE_TTL_NEWS, show_spinner=False)
-def fetch_all_rss_news() -> list:
-    """Hent nyheder fra alle konfigurerede RSS-feeds."""
+def _normalize_date(value):
+    """
+    Returnerer dato som string.
+    """
+    if not value:
+        return ""
+
+    try:
+        if isinstance(value, str):
+            return value[:19].replace("T", " ")
+        return str(value)
+    except Exception:
+        return ""
+
+
+def _make_news_id(title, url):
+    """
+    Bruges til deduplication.
+    """
+    raw = f"{title}|{url}".lower().strip()
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()
+
+
+def _clean_text(text):
+    if not text:
+        return ""
+    return str(text).replace("\n", " ").replace("\r", " ").strip()
+
+
+def _standard_news_item(
+    title,
+    source,
+    url,
+    published="",
+    summary="",
+    raw_text="",
+    tickers=None,
+    source_type="news",
+    credibility="medium",
+):
+    title = _clean_text(title)
+    summary = _clean_text(summary)
+    raw_text = _clean_text(raw_text or f"{title} {summary}")
+
+    return {
+        "id": _make_news_id(title, url),
+        "title": title,
+        "source": source,
+        "url": url,
+        "published": _normalize_date(published),
+        "summary": summary,
+        "raw_text": raw_text,
+        "source_type": source_type,
+        "credibility": credibility,
+        "source_tickers": tickers or [],
+    }
+
+
+def deduplicate_news(news_items):
+    """
+    Fjerner dubletter baseret på id/url/title.
+    """
+    seen = set()
+    unique = []
+
+    for item in news_items:
+        news_id = item.get("id") or _make_news_id(
+            item.get("title", ""),
+            item.get("url", ""),
+        )
+
+        if news_id in seen:
+            continue
+
+        seen.add(news_id)
+        unique.append(item)
+
+    return unique
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RSS feeds
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=15 * 60)
+def fetch_rss_news(max_per_feed=30):
+    """
+    Henter nyheder fra RSS-feeds.
+    """
+    news = []
+
+    feeds = RSS_FEEDS or [
+        {
+            "name": "CNBC Top News",
+            "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        },
+        {
+            "name": "MarketWatch Top Stories",
+            "url": "https://feeds.marketwatch.com/marketwatch/topstories/",
+        },
+        {
+            "name": "Yahoo Finance",
+            "url": "https://finance.yahoo.com/news/rssindex",
+        },
+    ]
+
+    for feed in feeds:
+        try:
+            parsed = feedparser.parse(feed["url"])
+
+            for entry in parsed.entries[:max_per_feed]:
+                title = entry.get("title", "")
+                url = entry.get("link", "")
+                summary = entry.get("summary", "")
+                published = (
+                    entry.get("published", "")
+                    or entry.get("updated", "")
+                )
+
+                if not title or not url:
+                    continue
+
+                news.append(
+                    _standard_news_item(
+                        title=title,
+                        source=feed.get("name", "RSS"),
+                        url=url,
+                        published=published,
+                        summary=summary,
+                        raw_text=f"{title} {summary}",
+                        source_type="rss",
+                        credibility="medium",
+                    )
+                )
+
+        except Exception:
+            continue
+
+    return news
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GDELT
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=15 * 60)
+def fetch_gdelt_news(
+    query=None,
+    max_records=75,
+    timespan="24h",
+):
+    """
+    Henter globale nyheder fra GDELT DOC API.
+
+    GDELT er god til makrotemaer, geopolitik, sektortrends og bred dækning.
+    """
+    if query is None:
+        query = (
+            "stock market OR inflation OR interest rates OR Federal Reserve OR "
+            "earnings OR oil prices OR AI OR semiconductor OR recession OR banks"
+        )
+
+    url = "https://api.gdeltproject.org/api/v2/doc/doc"
+
+    params = {
+        "query": query,
+        "mode": "ArtList",
+        "format": "json",
+        "maxrecords": max_records,
+        "timespan": timespan,
+        "sort": "HybridRel",
+    }
+
+    response = _safe_get(url, params=params)
+
+    if response is None:
+        return []
+
+    try:
+        data = response.json()
+    except Exception:
+        return []
+
+    articles = data.get("articles", [])
+    news = []
+
+    for article in articles:
+        title = article.get("title", "")
+        url_article = article.get("url", "")
+        source = article.get("domain", "GDELT")
+        published = article.get("seendate", "")
+        summary = article.get("snippet", "")
+
+        if not title or not url_article:
+            continue
+
+        news.append(
+            _standard_news_item(
+                title=title,
+                source=f"GDELT / {source}",
+                url=url_article,
+                published=published,
+                summary=summary,
+                raw_text=f"{title} {summary}",
+                source_type="gdelt",
+                credibility="medium",
+            )
+        )
+
+    return news
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Finnhub
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=15 * 60)
+def fetch_finnhub_market_news(category="general", max_items=50):
+    """
+    Henter generelle markedsnyheder fra Finnhub.
+    Kræver FINNHUB_API_KEY.
+    """
+    api_key = _get_secret("FINNHUB_API_KEY")
+
+    if not api_key:
+        return []
+
+    url = "https://finnhub.io/api/v1/news"
+
+    params = {
+        "category": category,
+        "token": api_key,
+    }
+
+    response = _safe_get(url, params=params)
+
+    if response is None:
+        return []
+
+    try:
+        data = response.json()
+    except Exception:
+        return []
+
+    news = []
+
+    for item in data[:max_items]:
+        title = item.get("headline", "")
+        url_item = item.get("url", "")
+        summary = item.get("summary", "")
+        source = item.get("source", "Finnhub")
+        timestamp = item.get("datetime")
+
+        if timestamp:
+            published = datetime.fromtimestamp(
+                timestamp,
+                tz=timezone.utc,
+            ).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            published = ""
+
+        if not title or not url_item:
+            continue
+
+        news.append(
+            _standard_news_item(
+                title=title,
+                source=f"Finnhub / {source}",
+                url=url_item,
+                published=published,
+                summary=summary,
+                raw_text=f"{title} {summary}",
+                source_type="finnhub_market",
+                credibility="high",
+            )
+        )
+
+    return news
+
+
+@st.cache_data(ttl=30 * 60)
+def fetch_finnhub_company_news(tickers=None, days_back=3, max_per_ticker=10):
+    """
+    Henter selskabsspecifikke nyheder fra Finnhub.
+    Kræver FINNHUB_API_KEY.
+    """
+    api_key = _get_secret("FINNHUB_API_KEY")
+
+    if not api_key:
+        return []
+
+    tickers = tickers or DEFAULT_WATCHLIST[:20]
+
+    to_date = datetime.utcnow().date()
+    from_date = to_date - timedelta(days=days_back)
+
     all_news = []
-    for feed_info in RSS_FEEDS:
-        items = fetch_rss_feed(feed_info)
-        all_news.extend(items)
-        time_module.sleep(0.2)   # Respektér rate limits
 
-    # Dedupliker på titel
-    seen_titles = set()
-    unique_news = []
-    for item in all_news:
-        title_key = item["title"].strip().lower()[:80]
-        if title_key not in seen_titles:
-            seen_titles.add(title_key)
-            unique_news.append(item)
+    for ticker in tickers:
+        url = "https://finnhub.io/api/v1/company-news"
 
-    return unique_news if unique_news else FALLBACK_NEWS
-
-
-@st.cache_data(ttl=CACHE_TTL_NEWS, show_spinner=False)
-def fetch_newsapi_news(query: str = "stock market", page_size: int = 20) -> list:
-    """
-    Valgfrit: Hent nyheder fra NewsAPI (kræver NEWS_API_KEY i Streamlit Secrets).
-    """
-    try:
-        api_key = st.secrets.get("NEWS_API_KEY", "")
-        if not api_key:
-            return []
-        url    = "https://newsapi.org/v2/everything"
         params = {
-            "q":        query,
-            "language": "en",
-            "sortBy":   "publishedAt",
-            "pageSize": page_size,
-            "apiKey":   api_key,
+            "symbol": ticker,
+            "from": from_date.isoformat(),
+            "to": to_date.isoformat(),
+            "token": api_key,
         }
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        articles = resp.json().get("articles", [])
-        return [
-            {
-                "title":    a.get("title",       "Ingen titel"),
-                "source":   a.get("source", {}).get("name", "NewsAPI"),
-                "published": a.get("publishedAt", "")[:16].replace("T", " "),
-                "url":       a.get("url",         "#"),
-                "summary":   a.get("description", "") or a.get("content", ""),
-                "raw_text":  f"{a.get('title','')} {a.get('description','')}",
-                "tickers":   [],
-            }
-            for a in articles
-            if a.get("title") and "[Removed]" not in a.get("title", "")
-        ]
-    except Exception:
+
+        response = _safe_get(url, params=params)
+
+        if response is None:
+            continue
+
+        try:
+            data = response.json()
+        except Exception:
+            continue
+
+        for item in data[:max_per_ticker]:
+            title = item.get("headline", "")
+            url_item = item.get("url", "")
+            summary = item.get("summary", "")
+            source = item.get("source", "Finnhub")
+            timestamp = item.get("datetime")
+
+            if timestamp:
+                published = datetime.fromtimestamp(
+                    timestamp,
+                    tz=timezone.utc,
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                published = ""
+
+            if not title or not url_item:
+                continue
+
+            all_news.append(
+                _standard_news_item(
+                    title=title,
+                    source=f"Finnhub Company / {source}",
+                    url=url_item,
+                    published=published,
+                    summary=summary,
+                    raw_text=f"{title} {summary}",
+                    tickers=[ticker],
+                    source_type="finnhub_company",
+                    credibility="high",
+                )
+            )
+
+        # skån gratis API-limits
+        time.sleep(0.05)
+
+    return all_news
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Alpha Vantage News Sentiment
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=30 * 60)
+def fetch_alpha_vantage_news(tickers=None, limit=100):
+    """
+    Henter news sentiment fra Alpha Vantage.
+    Kræver ALPHA_VANTAGE_API_KEY.
+    """
+    api_key = _get_secret("ALPHA_VANTAGE_API_KEY")
+
+    if not api_key:
         return []
 
+    tickers = tickers or DEFAULT_WATCHLIST[:10]
+    ticker_string = ",".join(tickers[:25])
 
-@st.cache_data(ttl=CACHE_TTL_NEWS, show_spinner=False)
-def fetch_finnhub_market_news(category: str = "general") -> list:
-    """
-    Valgfrit: Hent nyheder fra Finnhub (kræver FINNHUB_API_KEY i Streamlit Secrets).
-    """
+    url = "https://www.alphavantage.co/query"
+
+    params = {
+        "function": "NEWS_SENTIMENT",
+        "tickers": ticker_string,
+        "limit": limit,
+        "apikey": api_key,
+    }
+
+    response = _safe_get(url, params=params)
+
+    if response is None:
+        return []
+
     try:
-        api_key = st.secrets.get("FINNHUB_API_KEY", "")
-        if not api_key:
-            return []
-        url    = "https://finnhub.io/api/v1/news"
-        params = {"category": category, "token": api_key}
-        resp   = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        articles = resp.json()
-        return [
-            {
-                "title":     a.get("headline", "Ingen titel"),
-                "source":    a.get("source",   "Finnhub"),
-                "published": datetime.fromtimestamp(
-                    a.get("datetime", 0), tz=timezone.utc
-                ).strftime("%Y-%m-%d %H:%M"),
-                "url":       a.get("url",     "#"),
-                "summary":   a.get("summary", ""),
-                "raw_text":  f"{a.get('headline','')} {a.get('summary','')}",
-                "tickers":   a.get("related", "").split(",") if a.get("related") else [],
-            }
-            for a in articles
-        ]
+        data = response.json()
     except Exception:
         return []
 
+    feed = data.get("feed", [])
+    news = []
 
-def fetch_all_news() -> list:
+    for item in feed:
+        title = item.get("title", "")
+        url_item = item.get("url", "")
+        source = item.get("source", "Alpha Vantage")
+        published = item.get("time_published", "")
+        summary = item.get("summary", "")
+
+        ticker_sentiment = item.get("ticker_sentiment", [])
+        item_tickers = [
+            ts.get("ticker")
+            for ts in ticker_sentiment
+            if ts.get("ticker")
+        ]
+
+        if not title or not url_item:
+            continue
+
+        news_item = _standard_news_item(
+            title=title,
+            source=f"Alpha Vantage / {source}",
+            url=url_item,
+            published=published,
+            summary=summary,
+            raw_text=f"{title} {summary}",
+            tickers=item_tickers,
+            source_type="alpha_vantage",
+            credibility="high",
+        )
+
+        news_item["alpha_overall_sentiment_score"] = item.get(
+            "overall_sentiment_score"
+        )
+        news_item["alpha_overall_sentiment_label"] = item.get(
+            "overall_sentiment_label"
+        )
+        news_item["alpha_ticker_sentiment"] = ticker_sentiment
+
+        news.append(news_item)
+
+    return news
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SEC EDGAR latest filings
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=30 * 60)
+def fetch_sec_latest_filings(max_items=50):
     """
-    Kombiner alle nyhedskilder.
-    Rangér: Finnhub > NewsAPI > RSS.
-    Returnér en samlet, deduplikeret liste.
+    Henter seneste SEC-filings via company_tickers + submissions er tungt,
+    så denne simple version bruger SEC's recent submissions RSS.
     """
-    rss_news     = fetch_all_rss_news()
-    newsapi_news = fetch_newsapi_news()
-    finnhub_news = fetch_finnhub_market_news()
+    sec_feeds = [
+        {
+            "name": "SEC Latest 8-K",
+            "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=100&output=atom",
+        },
+        {
+            "name": "SEC Latest 10-Q",
+            "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=10-Q&count=100&output=atom",
+        },
+        {
+            "name": "SEC Latest 10-K",
+            "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=10-K&count=100&output=atom",
+        },
+    ]
 
-    combined   = finnhub_news + newsapi_news + rss_news
-    seen       = set()
-    deduplicated = []
-    for item in combined:
-        key = item.get("title", "").strip().lower()[:80]
-        if key and key not in seen:
-            seen.add(key)
-            deduplicated.append(item)
+    headers = {
+        "User-Agent": "StockDashboard/1.0 contact@example.com",
+        "Accept-Encoding": "gzip, deflate",
+        "Host": "www.sec.gov",
+    }
 
-    return deduplicated[:80] if deduplicated else FALLBACK_NEWS
+    news = []
+
+    for feed in sec_feeds:
+        try:
+            response = _safe_get(
+                feed["url"],
+                headers=headers,
+                timeout=15,
+            )
+
+            if response is None:
+                continue
+
+            parsed = feedparser.parse(response.text)
+
+            for entry in parsed.entries[:max_items]:
+                title = entry.get("title", "")
+                url = entry.get("link", "")
+                summary = entry.get("summary", "")
+                published = entry.get("updated", "") or entry.get("published", "")
+
+                if not title or not url:
+                    continue
+
+                news.append(
+                    _standard_news_item(
+                        title=title,
+                        source=feed["name"],
+                        url=url,
+                        published=published,
+                        summary=summary,
+                        raw_text=f"{title} {summary}",
+                        source_type="sec_filing",
+                        credibility="official",
+                    )
+                )
+
+        except Exception:
+            continue
+
+    return news
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main fetcher
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=15 * 60)
+def fetch_all_news(
+    tickers=None,
+    include_rss=True,
+    include_gdelt=True,
+    include_finnhub=True,
+    include_alpha_vantage=True,
+    include_sec=True,
+    max_total=300,
+):
+    """
+    Samlet news fetcher.
+    Returnerer deduplikeret liste af nyheder.
+    """
+    tickers = tickers or DEFAULT_WATCHLIST
+    all_news = []
+
+    if include_rss:
+        all_news.extend(fetch_rss_news(max_per_feed=40))
+
+    if include_gdelt:
+        all_news.extend(
+            fetch_gdelt_news(
+                max_records=100,
+                timespan="24h",
+            )
+        )
+
+    if include_finnhub:
+        all_news.extend(fetch_finnhub_market_news(max_items=50))
+        all_news.extend(
+            fetch_finnhub_company_news(
+                tickers=tickers[:25],
+                days_back=3,
+                max_per_ticker=8,
+            )
+        )
+
+    if include_alpha_vantage:
+        all_news.extend(
+            fetch_alpha_vantage_news(
+                tickers=tickers[:25],
+                limit=100,
+            )
+        )
+
+    if include_sec:
+        all_news.extend(fetch_sec_latest_filings(max_items=40))
+
+    all_news = deduplicate_news(all_news)
+
+    # Sortér groft efter published-string, hvis muligt
+    try:
+        all_news = sorted(
+            all_news,
+            key=lambda x: x.get("published", ""),
+            reverse=True,
+        )
+    except Exception:
+        pass
+
+    return all_news[:max_total]
