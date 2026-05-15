@@ -12,7 +12,7 @@ from src.market_data import get_market_overview, get_top_movers, get_intraday_to
 from src.news_fetcher import fetch_all_news
 from src.sentiment import analyze_sentiment
 from src.stock_mapper import enrich_news_with_stocks, load_tickers_df
-from src.scoring import calculate_scores
+from src.scoring import calculate_scores, calculate_research_candidate_score
 from src.charts import (
     plot_top_movers,
     plot_sentiment_distribution,
