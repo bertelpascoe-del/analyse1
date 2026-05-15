@@ -167,6 +167,7 @@ with st.spinner("Henter nyheder…"):
         item["sentiment"] = analyze_sentiment(item.get("raw_text", ""))
 
     news = enrich_news_with_stocks(raw_news, tickers_df)
+news = enrich_news_with_macro(news)
 
 
 # ── KPI-metrics ───────────────────────────────────────────────────────────────
