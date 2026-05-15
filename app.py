@@ -160,7 +160,7 @@ with st.spinner("Henter markedsdata…"):
     overview = get_market_overview(DEFAULT_WATCHLIST)
 
 with st.spinner("Henter nyheder…"):
-    raw_news = fetch_all_news()
+    raw_news = fetch_all_news(tickers=DEFAULT_WATCHLIST, max_total=300)
     tickers_df = load_tickers_df()
 
     for item in raw_news:
