@@ -197,7 +197,54 @@ if not overview.empty:
 else:
     st.warning("Markedsdata ikke tilgængelig.")
 
+# ── Makro- og sektoranalyse ──────────────────────────────────────────────────
+st.markdown("---")
+st.subheader("🌍 Makro- og sektoranalyse baseret på nyhedsflow")
 
+sector_trends = calculate_sector_trends(news)
+macro_summary = get_macro_theme_summary(news)
+
+col_macro, col_sector = st.columns([1, 2])
+
+with col_macro:
+    st.markdown("### Makrotemaer der fylder mest")
+
+    if not macro_summary.empty:
+        st.dataframe(
+            macro_summary,
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Ingen tydelige makrotemaer fundet i de hentede nyheder.")
+
+with col_sector:
+    st.markdown("### Sektorer på vej frem eller under pres")
+
+    if not sector_trends.empty:
+        st.dataframe(
+            sector_trends,
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Ingen sektortrends fundet endnu.")
+
+if not sector_trends.empty:
+    top_sector = sector_trends.iloc[0]
+    bottom_sector = sector_trends.iloc[-1]
+
+    st.info(
+        f"📈 Stærkeste sektor i nyhedsflowet: **{top_sector['Sektor']}** "
+        f"med trend-score **{top_sector['Trend-score']}**. "
+        f"Svageste sektor: **{bottom_sector['Sektor']}** "
+        f"med trend-score **{bottom_sector['Trend-score']}**."
+    )
+
+st.caption(
+    "Sektortrends er beregnet ud fra nyhedssentiment, makrotemaer og vurderet påvirkning. "
+    "Det er ikke finansiel rådgivning."
+)
 # ── Top movers ────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("📊 Dagens top movers")
