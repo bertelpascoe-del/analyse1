@@ -1,5 +1,5 @@
 # app.py — Forside / Markedsoverblik
-
+from src.utils import format_percent, get_market_status
 import streamlit as st
 import pandas as pd
 import sys
