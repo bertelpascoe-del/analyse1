@@ -162,3 +162,74 @@ def score_label_to_interest(buy_score: int, sell_score: int) -> str:
         return "Høj usikkerhed"
     else:
         return "Neutral interesse"
+        def calculate_research_candidate_score(row, scores):
+    """
+    Beregner en research-score fra 0-100.
+
+    Dette er ikke en købsanbefaling.
+    Scoren bruges kun til at finde aktier, som kan være værd at undersøge nærmere.
+    """
+
+    try:
+        change_pct = float(row.get("Ændring (%)", 0) or 0)
+    except Exception:
+        change_pct = 0
+
+    try:
+        vol_avg = float(row.get("Vol/Avg", 1) or 1)
+    except Exception:
+        vol_avg = 1
+
+    buy_score = scores.get("buy_score", 0)
+    sell_score = scores.get("sell_score", 0)
+    attention_score = scores.get("attention_score", 0)
+
+    research_score = 0
+
+    # Købsinteresse
+    research_score += min(buy_score * 0.35, 35)
+
+    # Opmærksomhed
+    research_score += min(attention_score * 0.20, 20)
+
+    # Momentum
+    if change_pct > 5:
+        research_score += 20
+    elif change_pct > 2:
+        research_score += 14
+    elif change_pct > 0:
+        research_score += 8
+    elif change_pct < -5:
+        research_score -= 15
+    elif change_pct < -2:
+        research_score -= 8
+
+    # Volumen
+    if vol_avg >= 3:
+        research_score += 15
+    elif vol_avg >= 2:
+        research_score += 10
+    elif vol_avg >= 1.5:
+        research_score += 6
+
+    # Straf for højt salgspres
+    research_score -= min(sell_score * 0.25, 25)
+
+    # Begræns til 0-100
+    research_score = max(0, min(100, round(research_score, 1)))
+
+    if research_score >= 75:
+        label = "Stærk research-kandidat"
+    elif research_score >= 60:
+        label = "Interessant momentum-kandidat"
+    elif research_score >= 45:
+        label = "Neutral/overvåg"
+    elif research_score >= 30:
+        label = "Svag kandidat"
+    else:
+        label = "Lav prioritet"
+
+    return {
+        "research_score": research_score,
+        "research_label": label,
+    }
