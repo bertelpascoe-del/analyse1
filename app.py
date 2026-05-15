@@ -8,7 +8,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import DEFAULT_WATCHLIST, DISCLAIMER
-from src.market_data import get_market_overview, get_top_movers
+from src.market_data import get_market_overview, get_top_movers, get_intraday_top_movers
 from src.news_fetcher import fetch_all_news
 from src.sentiment import analyze_sentiment
 from src.stock_mapper import enrich_news_with_stocks, load_tickers_df
