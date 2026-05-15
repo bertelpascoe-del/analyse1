@@ -168,7 +168,16 @@ with st.spinner("Henter nyheder…"):
 
     news = enrich_news_with_stocks(raw_news, tickers_df)
 news = enrich_news_with_macro(news)
+source_counts = pd.DataFrame(news)
 
+if not source_counts.empty and "source_type" in source_counts.columns:
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📰 Nyhedskilder")
+
+    counts = source_counts["source_type"].value_counts()
+
+    for source_type, count in counts.items():
+        st.sidebar.write(f"{source_type}: {count}")
 
 # ── KPI-metrics ───────────────────────────────────────────────────────────────
 st.subheader("Markedsoverblik")
