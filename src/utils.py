@@ -255,3 +255,27 @@ def get_global_market_status():
         )
 
     return markets_status
+
+def sentiment_label_to_emoji(label):
+    """
+    Konverterer sentiment-label til emoji.
+    Bruges fx i News Center.
+    """
+
+    if label is None:
+        return "⚪"
+
+    label = str(label).lower()
+
+    if "meget positiv" in label:
+        return "🟢🚀"
+    elif "positiv" in label:
+        return "🟢"
+    elif "meget negativ" in label:
+        return "🔴⚠️"
+    elif "negativ" in label:
+        return "🔴"
+    elif "neutral" in label:
+        return "⚪"
+    else:
+        return "⚪"
