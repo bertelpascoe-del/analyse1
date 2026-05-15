@@ -8,7 +8,11 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import DEFAULT_WATCHLIST, DISCLAIMER
-from src.market_data import get_market_overview, get_top_movers, get_intraday_top_movers
+from src.market_data import (
+    get_market_overview,
+    get_top_movers,
+    get_intraday_top_movers,
+)
 from src.news_fetcher import fetch_all_news
 from src.sentiment import analyze_sentiment
 from src.stock_mapper import enrich_news_with_stocks, load_tickers_df
@@ -18,7 +22,14 @@ from src.charts import (
     plot_sentiment_distribution,
     plot_most_mentioned,
 )
-from src.utils import format_number, format_percent, color_for_change, get_market_status, get_global_market_status
+from src.utils import (
+    format_number,
+    format_percent,
+    color_for_change,
+    get_market_status,
+    get_global_market_status,
+)
+
 
 # ── Side-konfiguration ────────────────────────────────────────────────────────
 st.set_page_config(
@@ -66,6 +77,18 @@ st.markdown(
       color: #90caf9;
       display: inline-block;
   }
+
+  .market-card {
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      border-radius: 8px;
+      background-color: #1e2130;
+  }
+
+  .small-note {
+      font-size: 0.8rem;
+      color: #999999;
+  }
 </style>
 """,
     unsafe_allow_html=True,
@@ -80,7 +103,7 @@ with st.sidebar:
     market_status = get_market_status()
 
     st.markdown(
-        f"**Markedsstatus:** "
+        f"**USA-marked:** "
         f"<span style='color:{market_status['color']}'>{market_status['status']}</span>",
         unsafe_allow_html=True,
     )
@@ -99,13 +122,7 @@ with st.sidebar:
     for market in global_markets:
         st.markdown(
             f"""
-            <div style="
-                padding: 8px 10px;
-                margin-bottom: 6px;
-                border-radius: 8px;
-                background-color: #1e2130;
-                border-left: 4px solid {market['color']};
-            ">
+            <div class="market-card" style="border-left: 4px solid {market['color']};">
                 <div style="font-weight: 600;">
                     {market['emoji']} {market['name']}
                 </div>
@@ -124,6 +141,7 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
+    st.markdown("---")
     st.caption(DISCLAIMER)
 
 
@@ -176,13 +194,14 @@ else:
 
 # ── Top movers ────────────────────────────────────────────────────────────────
 st.markdown("---")
+st.subheader("📊 Dagens top movers")
 
 col_g, col_l, col_v = st.columns(3)
 
 movers = get_top_movers(DEFAULT_WATCHLIST) if not overview.empty else {}
 
 with col_g:
-    st.subheader("🟢 Top vindere")
+    st.markdown("### 🟢 Top vindere")
 
     for stock in movers.get("gainers", []):
         pct = stock.get("Ændring (%)", 0) or 0
@@ -194,7 +213,7 @@ with col_g:
         )
 
 with col_l:
-    st.subheader("🔴 Top tabere")
+    st.markdown("### 🔴 Top tabere")
 
     for stock in movers.get("losers", []):
         pct = stock.get("Ændring (%)", 0) or 0
@@ -206,7 +225,7 @@ with col_l:
         )
 
 with col_v:
-    st.subheader("📊 Høj volumen")
+    st.markdown("### 📊 Høj volumen")
 
     for stock in movers.get("high_volume", []):
         ratio = stock.get("Vol/Avg", 0) or 0
@@ -226,6 +245,7 @@ if not overview.empty:
     combined = pd.concat([top10, bot10]).drop_duplicates("Ticker")
 
     st.plotly_chart(plot_top_movers(combined), use_container_width=True)
+
 
 # ── Intraday top movers ───────────────────────────────────────────────────────
 st.markdown("---")
@@ -248,13 +268,27 @@ with col_intraday_gainers:
 
     if gainers_2h is not None and not gainers_2h.empty:
         display_gainers = gainers_2h.copy()
-        display_gainers["Pris nu"] = display_gainers["Pris nu"].map(lambda x: f"${x:.2f}")
-        display_gainers["Pris før"] = display_gainers["Pris før"].map(lambda x: f"${x:.2f}")
-        display_gainers["Ændring (%)"] = display_gainers["Ændring (%)"].map(lambda x: f"{x:+.2f}%")
+
+        display_gainers["Pris nu"] = display_gainers["Pris nu"].map(
+            lambda x: f"${x:.2f}"
+        )
+        display_gainers["Pris før"] = display_gainers["Pris før"].map(
+            lambda x: f"${x:.2f}"
+        )
+        display_gainers["Ændring (%)"] = display_gainers["Ændring (%)"].map(
+            lambda x: f"{x:+.2f}%"
+        )
 
         st.dataframe(
             display_gainers[
-                ["Ticker", "Pris før", "Pris nu", "Ændring (%)", "Starttid", "Seneste tid"]
+                [
+                    "Ticker",
+                    "Pris før",
+                    "Pris nu",
+                    "Ændring (%)",
+                    "Starttid",
+                    "Seneste tid",
+                ]
             ],
             use_container_width=True,
             hide_index=True,
@@ -269,13 +303,27 @@ with col_intraday_losers:
 
     if losers_2h is not None and not losers_2h.empty:
         display_losers = losers_2h.copy()
-        display_losers["Pris nu"] = display_losers["Pris nu"].map(lambda x: f"${x:.2f}")
-        display_losers["Pris før"] = display_losers["Pris før"].map(lambda x: f"${x:.2f}")
-        display_losers["Ændring (%)"] = display_losers["Ændring (%)"].map(lambda x: f"{x:+.2f}%")
+
+        display_losers["Pris nu"] = display_losers["Pris nu"].map(
+            lambda x: f"${x:.2f}"
+        )
+        display_losers["Pris før"] = display_losers["Pris før"].map(
+            lambda x: f"${x:.2f}"
+        )
+        display_losers["Ændring (%)"] = display_losers["Ændring (%)"].map(
+            lambda x: f"{x:+.2f}%"
+        )
 
         st.dataframe(
             display_losers[
-                ["Ticker", "Pris før", "Pris nu", "Ændring (%)", "Starttid", "Seneste tid"]
+                [
+                    "Ticker",
+                    "Pris før",
+                    "Pris nu",
+                    "Ændring (%)",
+                    "Starttid",
+                    "Seneste tid",
+                ]
             ],
             use_container_width=True,
             hide_index=True,
@@ -287,6 +335,8 @@ st.caption(
     "Intraday-data kan være forsinket og afhænger af markedets åbningstid. "
     "Dette er ikke finansiel rådgivning."
 )
+
+
 # ── Scoring-tabel ─────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("📊 Interesseanalyse")
@@ -312,6 +362,7 @@ if not overview.empty:
         ]
 
         scores = calculate_scores(ticker_info, rel_news)
+        research = calculate_research_candidate_score(row, scores)
 
         score_rows.append(
             {
@@ -326,23 +377,73 @@ if not overview.empty:
                 "Købsinteresse": scores["buy_score"],
                 "Salgspres": scores["sell_score"],
                 "Opmærksomhed": scores["attention_score"],
+                "Research-score": research["research_score"],
+                "Research-vurdering": research["research_label"],
                 "Status": scores["label"],
             }
         )
 
     score_df = pd.DataFrame(score_rows)
 
+    # ── Research-kandidater ───────────────────────────────────────────────────
+    st.markdown("### 🔎 Potentielle research-kandidater")
+
+    research_df = score_df.sort_values(
+        "Research-score",
+        ascending=False,
+    ).head(10)
+
     st.dataframe(
-        score_df.style.background_gradient(
-            subset=["Købsinteresse"],
-            cmap="Greens",
-        ).background_gradient(
-            subset=["Salgspres"],
-            cmap="Reds",
-        ),
+        research_df[
+            [
+                "Ticker",
+                "Navn",
+                "Pris",
+                "Dag %",
+                "Købsinteresse",
+                "Salgspres",
+                "Opmærksomhed",
+                "Research-score",
+                "Research-vurdering",
+            ]
+        ],
         use_container_width=True,
         hide_index=True,
     )
+
+    st.warning(
+        "Dette er ikke en anbefaling om at købe eller sælge værdipapirer. "
+        "Research-scoren er en datadrevet screeningmodel og bør kun bruges "
+        "som udgangspunkt for egen analyse."
+    )
+
+    # ── Samlet scoringstabel ──────────────────────────────────────────────────
+    st.markdown("### 📋 Samlet interesseanalyse")
+
+    try:
+        st.dataframe(
+            score_df.style.background_gradient(
+                subset=["Købsinteresse"],
+                cmap="Greens",
+            ).background_gradient(
+                subset=["Salgspres"],
+                cmap="Reds",
+            ).background_gradient(
+                subset=["Research-score"],
+                cmap="Blues",
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+    except Exception:
+        st.dataframe(
+            score_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+else:
+    st.warning("Ingen markedsdata fundet til interesseanalyse.")
 
 
 # ── Nyheder ───────────────────────────────────────────────────────────────────
@@ -353,27 +454,29 @@ col_news, col_charts = st.columns([3, 2])
 with col_news:
     st.subheader("📰 Seneste nyheder")
 
-    for item in news[:8]:
-        sent = item.get("sentiment", {})
-        label = sent.get("label", "Neutral")
+    if news:
+        for item in news[:8]:
+            sent = item.get("sentiment", {})
+            label = sent.get("label", "Neutral")
 
-        css = (
-            "positive"
-            if "positiv" in label.lower()
-            else "negative"
-            if "negativ" in label.lower()
-            else "neutral"
-        )
+            css = (
+                "positive"
+                if "positiv" in label.lower()
+                else "negative"
+                if "negativ" in label.lower()
+                else "neutral"
+            )
 
-        tickers_html = " ".join(
-            f"<span class='ticker-badge'>{t}</span>"
-            for t in item.get("affected_tickers", [])[:4]
-        )
+            tickers_html = " ".join(
+                f"<span class='ticker-badge'>{t}</span>"
+                for t in item.get("affected_tickers", [])[:4]
+            )
 
-        impact = sent.get("impact", "Lav")
+            impact = sent.get("impact", "Lav")
+            url = item.get("url", "#")
 
-        st.markdown(
-            f"""
+            st.markdown(
+                f"""
 <div class='news-card {css}'>
   <b>{item.get('title', '')}</b><br>
   <small style='color:#9e9e9e'>
@@ -383,12 +486,14 @@ with col_news:
   {tickers_html}
   <br>
   <small>{item.get('summary', '')[:160]}…</small><br>
-  <a href="{item.get('url', '#')}" target="_blank"
+  <a href="{url}" target="_blank"
      style='color:#90caf9;font-size:0.8rem'>Læs mere →</a>
 </div>
 """,
-            unsafe_allow_html=True,
-        )
+                unsafe_allow_html=True,
+            )
+    else:
+        st.info("Ingen nyheder fundet endnu.")
 
 
 with col_charts:
