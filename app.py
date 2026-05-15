@@ -4,6 +4,11 @@ import streamlit as st
 import pandas as pd
 import sys
 import os
+from src.macro_analyzer import (
+    enrich_news_with_macro,
+    calculate_sector_trends,
+    get_macro_theme_summary,
+)
 
 sys.path.insert(0, os.path.dirname(__file__))
 
