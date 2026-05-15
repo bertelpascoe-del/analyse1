@@ -1,123 +1,141 @@
-# src/utils.py — Hjælpefunktioner
 from datetime import datetime, time
 import pytz
-import re
 
 
-def format_number(n, decimals: int = 2) -> str:
-    """Formatér et tal til læsevenlig streng, fx 1234567 → '1.23M'."""
-    if n is None:
-        return "N/A"
-    try:
-        n = float(n)
-        if abs(n) >= 1_000_000_000:
-            return f"{n / 1_000_000_000:.{decimals}f}B"
-        elif abs(n) >= 1_000_000:
-            return f"{n / 1_000_000:.{decimals}f}M"
-        elif abs(n) >= 1_000:
-            return f"{n / 1_000:.{decimals}f}K"
-        else:
-            return f"{n:.{decimals}f}"
-    except (ValueError, TypeError):
-        return "N/A"
+GLOBAL_MARKETS = [
+    {
+        "name": "USA - NYSE/Nasdaq",
+        "timezone": "America/New_York",
+        "open": time(9, 30),
+        "close": time(16, 0),
+        "pre_open": time(4, 0),
+        "after_close": time(20, 0),
+        "emoji": "🇺🇸",
+    },
+    {
+        "name": "Danmark - Nasdaq Copenhagen",
+        "timezone": "Europe/Copenhagen",
+        "open": time(9, 0),
+        "close": time(17, 0),
+        "pre_open": None,
+        "after_close": None,
+        "emoji": "🇩🇰",
+    },
+    {
+        "name": "Tyskland - Xetra",
+        "timezone": "Europe/Berlin",
+        "open": time(9, 0),
+        "close": time(17, 30),
+        "pre_open": None,
+        "after_close": None,
+        "emoji": "🇩🇪",
+    },
+    {
+        "name": "Storbritannien - LSE",
+        "timezone": "Europe/London",
+        "open": time(8, 0),
+        "close": time(16, 30),
+        "pre_open": None,
+        "after_close": None,
+        "emoji": "🇬🇧",
+    },
+    {
+        "name": "Japan - Tokyo Stock Exchange",
+        "timezone": "Asia/Tokyo",
+        "open": time(9, 0),
+        "close": time(15, 30),
+        "pre_open": None,
+        "after_close": None,
+        "emoji": "🇯🇵",
+    },
+    {
+        "name": "Hong Kong - HKEX",
+        "timezone": "Asia/Hong_Kong",
+        "open": time(9, 30),
+        "close": time(16, 0),
+        "pre_open": None,
+        "after_close": None,
+        "emoji": "🇭🇰",
+    },
+    {
+        "name": "Kina - Shanghai",
+        "timezone": "Asia/Shanghai",
+        "open": time(9, 30),
+        "close": time(15, 0),
+        "pre_open": None,
+        "after_close": None,
+        "emoji": "🇨🇳",
+    },
+    {
+        "name": "Australien - ASX",
+        "timezone": "Australia/Sydney",
+        "open": time(10, 0),
+        "close": time(16, 0),
+        "pre_open": None,
+        "after_close": None,
+        "emoji": "🇦🇺",
+    },
+]
 
 
-def format_percent(n, show_sign: bool = True) -> str:
-    """Formatér procent med fortegn, fx 0.032 → '+3.20%'."""
-    if n is None:
-        return "N/A"
-    try:
-        n = float(n)
-        sign = "+" if n > 0 and show_sign else ""
-        return f"{sign}{n:.2f}%"
-    except (ValueError, TypeError):
-        return "N/A"
-
-
-def color_for_change(value: float) -> str:
-    """Returnér CSS-farve baseret på positiv/negativ ændring."""
-    try:
-        if float(value) > 0:
-            return "#00c853"
-        elif float(value) < 0:
-            return "#d50000"
-        else:
-            return "#9e9e9e"
-    except (ValueError, TypeError):
-        return "#9e9e9e"
-
-
-def get_market_status() -> dict:
+def get_global_market_status():
     """
-    Returnér status for det amerikanske aktiemarked (NYSE/NASDAQ).
-    Åbningstider: hverdage 09:30–16:00 ET.
+    Returnerer markedsstatus for større globale aktiemarkeder.
+
+    Bemærk:
+    Denne simple version tager højde for lokal tid og weekender,
+    men ikke helligdage eller særlige lukkedage.
     """
-    et = pytz.timezone("America/New_York")
-    now_et = datetime.now(et)
-    weekday = now_et.weekday()   # 0=man, 6=søn
-    current_time = now_et.time()
 
-    market_open  = time(9, 30)
-    market_close = time(16, 0)
-    pre_open     = time(4, 0)
-    after_close  = time(20, 0)
+    markets_status = []
 
-    if weekday >= 5:
-        return {"status": "Lukket (weekend)", "color": "#9e9e9e", "open": False}
-    elif market_open <= current_time <= market_close:
-        return {"status": "🟢 Marked åbent", "color": "#00c853", "open": True}
-    elif pre_open <= current_time < market_open:
-        return {"status": "🟡 Pre-market", "color": "#ffab00", "open": False}
-    elif market_close < current_time <= after_close:
-        return {"status": "🟡 After-hours", "color": "#ffab00", "open": False}
-    else:
-        return {"status": "🔴 Marked lukket", "color": "#d50000", "open": False}
+    for market in GLOBAL_MARKETS:
+        tz = pytz.timezone(market["timezone"])
+        now = datetime.now(tz)
+        current_time = now.time()
+        weekday = now.weekday()
 
+        is_weekend = weekday >= 5
 
-def safe_get(d: dict, *keys, default=None):
-    """Sikker nested dict-opslag uden KeyError."""
-    for key in keys:
-        if isinstance(d, dict):
-            d = d.get(key, default)
+        if is_weekend:
+            status = "Lukket"
+            status_type = "closed"
+            color = "#d50000"
+        elif market["open"] <= current_time <= market["close"]:
+            status = "Åbent"
+            status_type = "open"
+            color = "#00c853"
+        elif (
+            market["pre_open"] is not None
+            and market["pre_open"] <= current_time < market["open"]
+        ):
+            status = "Pre-market"
+            status_type = "pre_market"
+            color = "#ffab00"
+        elif (
+            market["after_close"] is not None
+            and market["close"] < current_time <= market["after_close"]
+        ):
+            status = "After-hours"
+            status_type = "after_hours"
+            color = "#ffab00"
         else:
-            return default
-    return d
+            status = "Lukket"
+            status_type = "closed"
+            color = "#d50000"
 
+        markets_status.append(
+            {
+                "name": market["name"],
+                "emoji": market["emoji"],
+                "status": status,
+                "status_type": status_type,
+                "color": color,
+                "local_time": now.strftime("%H:%M"),
+                "timezone": market["timezone"],
+                "open": market["open"].strftime("%H:%M"),
+                "close": market["close"].strftime("%H:%M"),
+            }
+        )
 
-def extract_tickers_from_text(text: str) -> list:
-    """Find ticker-symboler i en tekst, fx '$AAPL' eller 'NVDA'."""
-    # $TICKER eller store bogstaver 1-5 tegn
-    dollar_tickers = re.findall(r'\$([A-Z]{1,5})', text)
-    word_tickers   = re.findall(r'\b([A-Z]{2,5})\b', text)
-    combined = list(set(dollar_tickers + word_tickers))
-    # Filtrer almindelige ord fra
-    stopwords = {
-        "THE", "AND", "FOR", "ARE", "BUT", "NOT", "YOU",
-        "ALL", "CAN", "HER", "WAS", "ONE", "OUR", "OUT",
-        "DAY", "GET", "HAS", "HIM", "HIS", "HOW", "ITS",
-        "NEW", "NOW", "OLD", "SEE", "TWO", "WHO", "DID",
-        "US", "AM", "PM", "ET", "CEO", "CFO", "IPO", "ETF",
-        "NYSE", "NASDAQ", "SEC", "FED", "GDP", "CPI", "EPS",
-    }
-    return [t for t in combined if t not in stopwords and len(t) >= 2]
-
-
-def truncate_text(text: str, max_chars: int = 200) -> str:
-    """Afkort tekst og tilføj '…'."""
-    if not text:
-        return ""
-    text = text.strip()
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars].rsplit(" ", 1)[0] + "…"
-
-
-def sentiment_label_to_emoji(label: str) -> str:
-    mapping = {
-        "Meget positiv": "🟢",
-        "Positiv":        "🟩",
-        "Neutral":        "⬜",
-        "Negativ":        "🟥",
-        "Meget negativ":  "🔴",
-    }
-    return mapping.get(label, "⬜")
+    return markets_status
